@@ -1,7 +1,168 @@
 [project]
 name = "rag-experimentations"
 version = "0.1.0"
-description = "Add your description here"
+description = "Hungarian RAG evaluation framework comparing embedding models with triple-threat chunking"
 readme = "README.md"
-requires-python = ">=3.9"
-dependencies = []
+requires-python = ">=3.11"
+dependencies = [
+    # Core RAG framework
+    "llama-index-core>=0.12.0",
+    "llama-index-vector-stores-postgres>=0.4.0",
+    "llama-index-embeddings-huggingface>=0.4.0",
+    "llama-index-llms-huggingface>=0.5.0",
+    "llama-index-readers-file>=0.4.0",
+    "llama-index-storage-kvstore-postgres>=0.4.0",
+    "llama-index-storage-docstore-postgres>=0.4.0",
+
+    # Confluence ingestion
+    "atlassian-python-api>=3.41.0",
+    "markdownify>=0.13.0",
+
+    # Database
+    "sqlalchemy>=2.0",
+    "psycopg2-binary>=2.9",
+    "pgvector>=0.3.0",
+
+    # Configuration and validation
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "python-dotenv>=1.0",
+
+    # Evaluation
+    "ragas>=0.2.0",
+    "datasets>=2.20",
+
+    # Observability
+    "langfuse>=2.40",
+    "llama-index-callbacks-langfuse>=0.3.0",
+
+    # Terminal output
+    "rich>=13.7",
+    "tqdm>=4.66",
+
+    # CLI
+    "typer>=0.12",
+
+    # Embedding model runtime
+    "torch>=2.3",
+    "transformers>=4.44",
+    "sentence-transformers>=3.0",
+    "FlagEmbedding>=1.2",
+    "bitsandbytes>=0.43",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "mypy>=1.10",
+    "ruff>=0.5",
+    "isort>=5.13",
+    "black>=24.4",
+    "poethepoet>=0.27",
+    "types-psycopg2>=2.9",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]  # ignore unused imports in __init__.py files
+# "test_*.py" = ["F401", "F403", "F811"]  # ignore unused imports in test files as well
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+extend_skip = ["__init__.py"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.poe.tasks.lint]
+help = "Lint code with ruff and mypy"
+shell = "uv run ruff check src/ tests/ && uv run mypy src/"
+interpreter = "bash"
+
+[tool.poe.tasks.format]
+help = "Format code with black and isort"
+shell = "uv run black src/ tests/ && uv run isort src/ tests/"
+interpreter = "bash"
+
+[tool.poe.tasks.typecheck]
+help = "Run mypy type checking"
+shell = "uv run mypy src/"
+interpreter = "bash"
+
+[tool.poe.tasks.check-all]
+help = "Format then lint then typecheck"
+shell = "uv run black src/ tests/ && uv run isort src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/"
+interpreter = "bash"
+
+[tool.poe.tasks.test]
+help = "Run tests with pytest"
+shell = "uv run pytest tests/ -v"
+interpreter = "bash"
+
+[tool.poe.tasks.test-cov]
+help = "Run tests with coverage report"
+shell = "uv run pytest tests/ --cov=src --cov-report=term-missing"
+interpreter = "bash"
+
+[tool.poe.tasks.ingest]
+help = "Run Confluence ingestion pipeline"
+shell = "uv run python main.py ingest"
+interpreter = "bash"
+
+[tool.poe.tasks.index]
+help = "Run indexing pipeline"
+shell = "uv run python main.py index"
+interpreter = "bash"
+
+[tool.poe.tasks.evaluate]
+help = "Run RAGAS evaluation"
+shell = "uv run python main.py evaluate"
+interpreter = "bash"
+
+[tool.poe.tasks.report]
+help = "Print evaluation results report"
+shell = "uv run python main.py report"
+interpreter = "bash"
+
+[tool.poe.tasks.run-all]
+help = "Run full pipeline end-to-end"
+shell = "uv run python main.py run-all"
+interpreter = "bash"
+
+[tool.poe.tasks.db-up]
+help = "Start PostgreSQL container"
+shell = "docker compose up -d"
+interpreter = "bash"
+
+[tool.poe.tasks.db-down]
+help = "Stop PostgreSQL container"
+shell = "docker compose down"
+interpreter = "bash"
+
+[tool.poe.tasks.db-reset]
+help = "Reset DB volumes and restart"
+shell = "docker compose down -v && docker compose up -d"
+interpreter = "bash"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

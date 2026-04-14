@@ -8,3 +8,27 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Environment variables
+.env
+
+# Data directory (downloaded docs, evaluation datasets)
+data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# mypy
+.mypy_cache/
+
+# pytest
+.pytest_cache/
+htmlcov/
+.coverage
