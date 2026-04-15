@@ -31,14 +31,17 @@ class EmbeddingModelFactory:
                     model_path=settings.harrier_model_path,
                     device=settings.device,
                     quantize=settings.quantize_harrier,
+                    batch_size=settings.batch_size,
                 )
             case EmbeddingModelName.QWEN3_EMBEDDING_8B:
                 return QwenEmbeddingAdapter(
                     model_path=settings.qwen_model_path,
                     device=settings.device,
+                    batch_size=settings.batch_size,
                 )
             case EmbeddingModelName.BGE_M3:
                 return BgeM3EmbeddingAdapter(
                     model_path=settings.bge_m3_model_path,
                     device=settings.device,
+                    batch_size=settings.batch_size,
                 )

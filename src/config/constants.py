@@ -3,7 +3,7 @@
 from typing import List
 
 # Chunk sizes for hierarchical splitting (tokens)
-HIERARCHICAL_CHUNK_SIZES: List[int] = [2048, 512, 128]
+HIERARCHICAL_CHUNK_SIZES: List[int] = [2048, 512, 256]
 
 # Semantic splitter thresholds
 SEMANTIC_BUFFER_SIZE: int = 1
@@ -24,3 +24,6 @@ VECTOR_TABLE_PREFIX: str = "vectors"
 
 # Default data directory
 DEFAULT_DATA_DIR: str = "data"
+
+# Document-aware chunker: documents below this line count are indexed whole
+DOCUMENT_AWARE_SMALL_DOC_LINE_THRESHOLD: int = 50

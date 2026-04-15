@@ -6,15 +6,18 @@ from datetime import datetime
 from typing import List
 
 from datasets import Dataset
+from langchain_openai import ChatOpenAI
 from ragas import evaluate
 from ragas.evaluation import EvaluationResult as RagasEvaluationResult
+from ragas.llms import LangchainLLMWrapper
 from ragas.metrics import context_entity_recall, context_precision, context_recall
 
+from src.config.settings import OpenRouterSettings
 from src.models.schemas import EvaluationResult
 
 
 class RagasEvaluator:
-    """Runs RAGAS evaluation on retrieval results.
+    """Runs RAGAS evaluation on retrieval results using OpenRouter as the judge LLM.
 
     Evaluates three key metrics:
     - Context Precision: ranking quality (best stuff at top?)
@@ -22,7 +25,13 @@ class RagasEvaluator:
     - Context Entities Recall: relational quality (entities found?)
     """
 
-    def __init__(self) -> None:
+    def __init__(self, settings: OpenRouterSettings) -> None:
+        judge_llm = ChatOpenAI(
+            model=settings.eval_model,
+            base_url=settings.base_url,
+            api_key=settings.api_key,
+        )
+        self._llm = LangchainLLMWrapper(judge_llm)
         self._metrics = [context_precision, context_recall, context_entity_recall]
 
     def evaluate(
@@ -46,7 +55,7 @@ class RagasEvaluator:
             EvaluationResult with all three metric scores.
         """
         dataset = self._prepare_dataset(questions, ground_truths, retrieved_contexts)
-        raw_result = evaluate(dataset=dataset, metrics=self._metrics)
+        raw_result = evaluate(dataset=dataset, metrics=self._metrics, llm=self._llm)
 
         if not isinstance(raw_result, RagasEvaluationResult):
             raise RuntimeError(

@@ -9,6 +9,7 @@ class ChunkingStrategy(str, Enum):
     SEMANTIC = "semantic"
     HIERARCHICAL = "hierarchical"
     RELATIONAL = "relational"
+    DOCUMENT_AWARE = "document_aware"
 
 
 class EmbeddingModelName(str, Enum):
@@ -17,6 +18,13 @@ class EmbeddingModelName(str, Enum):
     HARRIER_OSS_V1 = "harrier-oss-v1"
     QWEN3_EMBEDDING_8B = "qwen3-embedding-8b"
     BGE_M3 = "bge-m3"
+
+
+class RerankerModel(str, Enum):
+    """Available reranker models for ensemble retrieval."""
+
+    BGE = "bge"
+    QWEN3 = "qwen3"
 
 
 class RagasMetric(str, Enum):

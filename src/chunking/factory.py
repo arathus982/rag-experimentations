@@ -5,6 +5,7 @@ from typing import Optional, Union
 from llama_index.core.base.embeddings.base import BaseEmbedding
 from llama_index.core.llms import LLM
 
+from src.chunking.document_aware import DocumentAwareChunker
 from src.chunking.hierarchical import HierarchicalChunker
 from src.chunking.relational import RelationalChunker
 from src.chunking.semantic import SemanticChunker
@@ -19,7 +20,7 @@ class ChunkingFactory:
         strategy: ChunkingStrategy,
         embed_model: Optional[BaseEmbedding] = None,
         llm: Optional[LLM] = None,
-    ) -> Union[SemanticChunker, HierarchicalChunker, RelationalChunker]:
+    ) -> Union[SemanticChunker, HierarchicalChunker, RelationalChunker, DocumentAwareChunker]:
         """Create a chunker for the specified strategy.
 
         Args:
@@ -39,3 +40,5 @@ class ChunkingFactory:
                 return HierarchicalChunker()
             case ChunkingStrategy.RELATIONAL:
                 return RelationalChunker(llm=llm)
+            case ChunkingStrategy.DOCUMENT_AWARE:
+                return DocumentAwareChunker()

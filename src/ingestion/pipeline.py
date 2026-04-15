@@ -58,8 +58,11 @@ class IngestionPipeline:
         space_key = self._settings.confluence.space_key
         console.print(f"\n[bold green]Starting ingestion for space: {space_key}[/bold green]")
 
+        # Verify credentials before doing any real work
+        self._client.check_connection()
+
         # Step 1: Fetch page tree
-        pages = self._client.get_space_pages()
+        pages = self._client.get_pages()
         console.print(f"Found [bold]{len(pages)}[/bold] pages")
 
         # Build lookup and ancestry paths
@@ -73,19 +76,24 @@ class IngestionPipeline:
         )
 
         # Step 2: Process each page
-        for page in tqdm(pages, desc="Downloading pages"):
-            try:
-                self._process_page(page, pages_by_id, base_dir, manifest)
-            except Exception as e:
-                console.print(
-                    f"[red]Error processing '{page.title}' " f"(ID: {page.page_id}): {e}[/red]"
-                )
+        processed = 0
+        try:
+            for page in tqdm(pages, desc="Downloading pages"):
+                try:
+                    self._process_page(page, pages_by_id, base_dir, manifest)
+                    processed += 1
+                except Exception as e:
+                    console.print(
+                        f"[red]Error processing '{page.title}' (ID: {page.page_id}): {e}[/red]"
+                    )
+        except KeyboardInterrupt:
+            console.print(f"\n[yellow]Interrupted. Saving partial manifest ({processed} pages)…[/yellow]")
 
-        # Step 3: Save manifest
+        # Step 3: Save manifest (always, even on interrupt)
         self._metadata_manager.save_manifest(manifest)
         console.print(
             f"\n[bold green]Ingestion complete.[/bold green] "
-            f"Processed {len(pages)} pages. "
+            f"Processed {processed} pages. "
             f"Manifest saved to {self._metadata_manager._manifest_path}"
         )
         return manifest

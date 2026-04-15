@@ -3,6 +3,8 @@
 import json
 from typing import List
 
+from sqlalchemy import func
+
 from src.database.connection import DatabaseConnection
 from src.database.tables import EvaluationResultTable, IndexingTimingTable
 from src.models.schemas import (
@@ -69,6 +71,20 @@ class EvaluationResultStore:
                     )
                 )
         return results
+
+    def get_avg_indexing_time(self, model_name: str, strategy: str) -> float:
+        """Return average indexing duration for a (model, strategy) combo."""
+        for session in self._db.get_session():
+            result = (
+                session.query(func.avg(IndexingTimingTable.indexing_duration_seconds))
+                .filter(
+                    IndexingTimingTable.embedding_model == model_name,
+                    IndexingTimingTable.chunking_strategy == strategy,
+                )
+                .scalar()
+            )
+            return float(result) if result is not None else 0.0
+        return 0.0
 
     def get_comparison(self) -> EvaluationComparison:
         """Load all results and identify best per metric."""

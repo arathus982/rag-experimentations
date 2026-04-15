@@ -13,42 +13,37 @@ dependencies = [
     "llama-index-readers-file>=0.4.0",
     "llama-index-storage-kvstore-postgres>=0.4.0",
     "llama-index-storage-docstore-postgres>=0.4.0",
-
     # Confluence ingestion
     "atlassian-python-api>=3.41.0",
     "markdownify>=0.13.0",
-
     # Database
     "sqlalchemy>=2.0",
     "psycopg2-binary>=2.9",
     "pgvector>=0.3.0",
-
     # Configuration and validation
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
     "python-dotenv>=1.0",
-
     # Evaluation
     "ragas>=0.2.0",
     "datasets>=2.20",
-
     # Observability
     "langfuse>=2.40",
     "llama-index-callbacks-langfuse>=0.3.0",
-
     # Terminal output
     "rich>=13.7",
     "tqdm>=4.66",
-
     # CLI
     "typer>=0.12",
-
     # Embedding model runtime
     "torch>=2.3",
     "transformers>=4.44",
     "sentence-transformers>=3.0",
     "FlagEmbedding>=1.2",
     "bitsandbytes>=0.43",
+    "tiktoken>=0.12.0",
+    "plotly>=6.7.0",
+    "openai>=2.31.0",
 ]
 
 [dependency-groups]
@@ -121,15 +116,64 @@ help = "Run Confluence ingestion pipeline"
 shell = "uv run python main.py ingest"
 interpreter = "bash"
 
-[tool.poe.tasks.index]
-help = "Run indexing pipeline"
-shell = "uv run python main.py index"
+[tool.poe.tasks.visualize]
+help = "Open document metrics dashboard"
+shell = """
+args=""
+[[ "${force_refresh}" == "true" ]] && args="--force-refresh"
+uv run python main.py visualize $args
+"""
 interpreter = "bash"
 
-[tool.poe.tasks.evaluate]
-help = "Run RAGAS evaluation"
-shell = "uv run python main.py evaluate"
+[[tool.poe.tasks.visualize.args]]
+name = "force_refresh"
+options = ["--force-refresh", "-f"]
+type = "boolean"
+default = false
+
+[tool.poe.tasks.index]
+help = "Run indexing pipeline (omit flags to run all)"
+shell = """
+args=""
+[[ -n "${model}" ]] && args="$args --model ${model}"
+[[ -n "${strategy}" ]] && args="$args --strategy ${strategy}"
+uv run python main.py index $args
+"""
 interpreter = "bash"
+
+[[tool.poe.tasks.index.args]]
+name = "model"
+options = ["--model", "-m"]
+required = false
+default = ""
+
+[[tool.poe.tasks.index.args]]
+name = "strategy"
+options = ["--strategy", "-s"]
+required = false
+default = ""
+
+[tool.poe.tasks.evaluate]
+help = "Run RAGAS evaluation (omit flags to run all)"
+shell = """
+args=""
+[[ -n "${model}" ]] && args="$args --model ${model}"
+[[ -n "${strategy}" ]] && args="$args --strategy ${strategy}"
+uv run python main.py evaluate $args
+"""
+interpreter = "bash"
+
+[[tool.poe.tasks.evaluate.args]]
+name = "model"
+options = ["--model", "-m"]
+required = false
+default = ""
+
+[[tool.poe.tasks.evaluate.args]]
+name = "strategy"
+options = ["--strategy", "-s"]
+required = false
+default = ""
 
 [tool.poe.tasks.report]
 help = "Print evaluation results report"

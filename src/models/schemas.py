@@ -77,15 +77,36 @@ class EvaluationComparison(BaseModel):
         self.best_entities_recall_combo = f"{best_e.embedding_model}+{best_e.chunking_strategy}"
 
 
+class DocumentMetrics(BaseModel):
+    """Token, reference, and image counts for a single downloaded page."""
+
+    page_id: str
+    title: str
+    token_count: int
+    reference_count: int
+    image_count: int
+    local_path: str
+
+
+class MetricsReport(BaseModel):
+    """Aggregated metrics for all downloaded documents, used for visualization."""
+
+    generated_at: datetime
+    tokenizer: str
+    total_documents: int
+    documents: List[DocumentMetrics]
+
+
 class GoldenQAPair(BaseModel):
-    """A single manually-curated Q/A pair for evaluation."""
+    """A single question (and optional ground truth) for retrieval evaluation."""
 
     question: str
-    ground_truth: str
+    ground_truth: Optional[str] = None
     source_page_id: Optional[str] = None
+    source_title: Optional[str] = None
 
 
 class GoldenQADataset(BaseModel):
-    """Collection of golden Q/A pairs for RAGAS evaluation."""
+    """Collection of generated questions for RAGAS retrieval evaluation."""
 
     pairs: List[GoldenQAPair] = Field(default_factory=list)

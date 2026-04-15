@@ -7,6 +7,7 @@ from rich.console import Console
 
 from src.cli.commands import CLICommands
 from src.config.settings import AppSettings
+from src.models.enums import RerankerModel
 
 app = typer.Typer(
     name="rag-eval",
@@ -25,6 +26,22 @@ def _get_commands() -> CLICommands:
 def ingest() -> None:
     """Download Confluence docs to local Markdown with images."""
     _get_commands().ingest()
+
+
+@app.command(name="generate-qa")
+def generate_qa(
+    force_regenerate: bool = typer.Option(
+        False, "--force-regenerate", "-f", help="Ignore existing dataset and regenerate from scratch"
+    ),
+) -> None:
+    """Generate Hungarian retrieval questions from ingested documents via Gemini."""
+    _get_commands().generate_qa(force_regenerate=force_regenerate)
+
+
+@app.command(name="generate-answers")
+def generate_answers() -> None:
+    """Generate ground truth answers for questions that don't have one yet."""
+    _get_commands().generate_answers()
 
 
 @app.command()
@@ -51,6 +68,26 @@ def evaluate(
 ) -> None:
     """Run RAGAS evaluation for specified models x strategies."""
     _get_commands().evaluate(models=models, strategies=strategies)
+
+
+@app.command()
+def visualize(
+    force_refresh: bool = typer.Option(
+        False, "--force-refresh", "-f", help="Recompute metrics even if cache exists"
+    ),
+) -> None:
+    """Compute document metrics and open the Plotly dashboard in a browser."""
+    _get_commands().visualize(force_refresh=force_refresh)
+
+
+@app.command(name="evaluate-ensemble")
+def evaluate_ensemble(
+    reranker: RerankerModel = typer.Option(
+        RerankerModel.BGE, "--reranker", "-r", help="Reranker model to use (bge or qwen3)"
+    ),
+) -> None:
+    """Run RAGAS evaluation using BGE-M3 ensemble retrieval with reranking."""
+    _get_commands().evaluate_ensemble(reranker_model=reranker)
 
 
 @app.command()

@@ -1,3 +1,6 @@
+-- Separate database for Langfuse so it doesn't conflict with the RAG schema
+CREATE DATABASE langfusedb;
+
 -- Enable pgvector extension
 CREATE EXTENSION IF NOT EXISTS vector;
 

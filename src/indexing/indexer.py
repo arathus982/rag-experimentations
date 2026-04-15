@@ -7,7 +7,9 @@ from llama_index.core.base.embeddings.base import BaseEmbedding
 from llama_index.core.llms import LLM
 from llama_index.core.schema import BaseNode, Document
 from llama_index.vector_stores.postgres import PGVectorStore
+from rich.console import Console
 
+from src.chunking.document_aware import DocumentAwareChunker
 from src.chunking.factory import ChunkingFactory
 from src.chunking.hierarchical import HierarchicalChunker
 from src.chunking.relational import RelationalChunker
@@ -17,6 +19,8 @@ from src.config.settings import DatabaseSettings
 from src.embedding.base import EmbeddingModelAdapter
 from src.indexing.timer import IndexingTimer
 from src.models.enums import ChunkingStrategy
+
+console = Console()
 
 
 class Indexer:
@@ -56,6 +60,36 @@ class Indexer:
             text_search_config=HUNGARIAN_TEXT_SEARCH_CONFIG,
             hybrid_search=True,
         )
+
+    def load_vector_index(
+        self,
+        model_name: str,
+        strategy: ChunkingStrategy,
+        embed_model: BaseEmbedding,
+        embed_dim: int,
+    ) -> VectorStoreIndex:
+        """Load a previously built index from PGVectorStore without re-embedding.
+
+        Raises RuntimeError if the index table doesn't exist yet (run `poe index` first).
+        """
+        table_name = self._make_table_name(model_name, strategy.value)
+        vector_store = self._create_pg_vector_store(table_name, embed_dim)
+
+        try:
+            index = VectorStoreIndex.from_vector_store(
+                vector_store=vector_store,
+                embed_model=embed_model,
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"Could not load index for '{model_name}' / '{strategy.value}'. "
+                "Run 'poe index' first to build and persist the embeddings."
+            ) from exc
+
+        console.print(
+            f"  Loaded index [bold]{table_name}[/bold] from PostgreSQL"
+        )
+        return index
 
     def build_vector_index(
         self,
@@ -109,12 +143,17 @@ class Indexer:
                 documents, chunker, embed_model, adapter.model_name, strategy.value
             )
 
-        # Semantic and Hierarchical strategies produce nodes for VectorStoreIndex
+        # Semantic, Hierarchical, and DocumentAware strategies produce nodes for VectorStoreIndex
+        total = len(documents)
         all_nodes: List[BaseNode] = []
-        for doc in documents:
+        for idx, doc in enumerate(documents, start=1):
+            title = doc.metadata.get("title", doc.doc_id)
+            console.print(
+                f"  [{idx}/{total}] [cyan]{strategy.value}[/cyan] · [white]{title}[/white]"
+            )
             with self._timer.measure(
                 document_id=doc.doc_id,
-                document_title=doc.metadata.get("title", doc.doc_id),
+                document_title=title,
                 embedding_model=adapter.model_name,
                 chunking_strategy=strategy.value,
             ):
@@ -123,6 +162,8 @@ class Indexer:
                 elif isinstance(chunker, HierarchicalChunker):
                     nodes = chunker.chunk([doc])
                     nodes = HierarchicalChunker.get_leaf_nodes(nodes)
+                elif isinstance(chunker, DocumentAwareChunker):
+                    nodes = chunker.chunk([doc])
                 else:
                     nodes = []
                 all_nodes.extend(nodes)
@@ -143,16 +184,21 @@ class Indexer:
         model_name: str,
         strategy_value: str,
     ) -> PropertyGraphIndex:
-        """Build a PropertyGraphIndex with per-document timing."""
-        # For relational, we time the entire build since it's integrated
-        for doc in documents:
+        """Build a PropertyGraphIndex, timing each document individually."""
+        total = len(documents)
+        for idx, doc in enumerate(documents, start=1):
+            title = doc.metadata.get("title", doc.doc_id)
+            console.print(
+                f"  [{idx}/{total}] [cyan]{strategy_value}[/cyan] · [white]{title}[/white]"
+            )
             with self._timer.measure(
                 document_id=doc.doc_id,
-                document_title=doc.metadata.get("title", doc.doc_id),
+                document_title=title,
                 embedding_model=model_name,
                 chunking_strategy=strategy_value,
             ):
-                pass  # Timing recorded; actual indexing below
-            self._timer.update_last_chunk_count(0)
+                chunker.build_index([doc], embed_model)
+            self._timer.update_last_chunk_count(1)
 
+        # Return a fresh index over all documents for querying
         return chunker.build_index(documents, embed_model)
