@@ -213,7 +213,7 @@ This project evaluates embedding models for **Hungarian document processing and 
 |----------|------|-----------|
 | **Vector Database** | PostgreSQL + pgvector | Single unified database for vectors, entities, relations, and evaluation metrics. Supports native Hungarian stemming and hybrid search. No separate vector DB needed. |
 | **RAG Framework** | LlamaIndex | Superior "Data Framework" vs LangChain. Native support for hierarchical, semantic, and relational chunking without boilerplate. |
-| **Embedding Models** | Harrier-OSS-v1, Qwen3-Embedding-8B, BGE-M3 | All self-hosted, locally runnable models optimized for multilingual retrieval, specifically Hungarian. |
+| **Embedding Models** | GTE-multilingual-base, multilingual-E5-small, BGE-M3, Qwen3-Embedding-8B | All self-hosted, locally runnable models optimized for multilingual retrieval, specifically Hungarian. |
 | **Evaluation** | RAGAS | Evaluate retrieval quality with metrics like Context Precision, Context Recall, and Context Entities Recall. |
 | **Configuration** | python-dotenv + pydantic-settings | Environment-based config for API keys, model paths, DB connections. |
 | **Logging & Output** | Rich + tqdm | Clear terminal output, progress bars for long-running operations. |
@@ -327,13 +327,14 @@ db_url = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@localhost:{POSTGRES_
 
 ## Embedding Models to Evaluate
 
-| Model | Type | MTEB Score | Context | Local Hosting | Recommendation |
-|-------|------|-----------|---------|----------------|-----------------|
-| **Harrier-OSS-v1 (27B)** | Open-Source | ~74.3 | 32k | ✓ | Best overall OSS; excellent Hungarian; 27B variant is SOTA (as of March 2026) |
-| **Qwen3-Embedding-8B** | Open-Source | Competitive | 32k | ✓ | Best for long documents; 32k context ideal for chunking evaluation |
-| **BGE-M3** | Open-Source | ~63.0 | 8k | ✓ | Swiss Army Knife; dense + sparse + multi-vector retrieval; hybrid search champion |
+| Model | HF ID | Size | MTEB v2 | Context | Embedding Dim | Notes |
+|-------|-------|------|---------|---------|---------------|-------|
+| **GTE-multilingual-base** | `Alibaba-NLP/gte-multilingual-base` | ~305 MB | — | 8k | 768 | Compact, strong multilingual perf; requires `trust_remote_code=True` |
+| **multilingual-E5-small** | `intfloat/multilingual-e5-small` | ~471 MB | — | 512 | 384 | Lightweight baseline; needs `query: ` / `passage: ` instruction prefixes |
+| **BGE-M3** | `BAAI/bge-m3` | ~1.2 GB | ~63.0 | 8k | 1024 | Swiss Army Knife; dense + sparse + multi-vector; hybrid search champion |
+| **Qwen3-Embedding-8B** | `Qwen/Qwen3-Embedding-8B` | ~16 GB | Competitive | 32k | 4096 | Best for long documents; 32k context ideal for chunking evaluation |
 
-**Hungarian-specific requirement:** All models must handle accented characters correctly (á, é, ó, ö, ő, ü, ű). All three models handle this natively.
+**Hungarian-specific requirement:** All models must handle accented characters correctly (á, é, ó, ö, ő, ü, ű). All four models handle this natively.
 
 ---
 
@@ -370,7 +371,7 @@ Focus on these three metrics to evaluate the quality of your retrieval:
   - String-matching search will fail; use vector-based retrieval
 
 ### 2. **Normalization & Preprocessing**
-- All three embedding models handle Hungarian accents natively (á, é, ó, ö, ő, ü, ű)
+- All four embedding models handle Hungarian accents natively (á, é, ó, ö, ő, ü, ű)
 - Enable PostgreSQL's native Hungarian text search: `text_search_config='hungarian'` in your PGVectorStore
 - This enables Hungarian stemming and stop-word filtering for hybrid search
 
@@ -405,7 +406,7 @@ This state-machine approach adapts to what works best for each query.
 - ✅ **Use PostgreSQL + pgvector:** Single database for vectors, entities, relations, and evaluation
 - ✅ **Use LlamaIndex:** Not LangChain; it's a data framework, not an orchestration framework
 - ✅ **Implement all three chunking types:** Semantic + Hierarchical + Relational (not just one)
-- ✅ **Local embedding models only:** Harrier-OSS-v1, Qwen3-Embedding-8B, BGE-M3 (self-hosted for privacy/cost)
+- ✅ **Local embedding models only:** GTE-multilingual-base, multilingual-E5-small, BGE-M3, Qwen3-Embedding-8B (self-hosted for privacy/cost)
 - ✅ **RAGAS evaluation:** Context Precision, Context Recall, Context Entities Recall are mandatory metrics
 - ✅ **Hungarian text search config:** Use PostgreSQL's built-in `'hungarian'` stemming
 - ✅ **Preserve Confluence hierarchy:** Document ingestion must maintain folder/page structure exactly

@@ -20,8 +20,6 @@ These models consistently top the **MTEB (Massive Text Embedding Benchmark)** fo
 ### 2. The Open-Source Leaders (Self-Hosted/Privacy)
 If you need to keep your data on-premise or avoid API costs, these are the gold standards.
 
-* **Harrier-OSS-v1 (Microsoft):** * **Why:** Released in March 2026, the **27B variant** is the current open-source champion on MTEB v2. Even the smaller **0.6B variant** outperforms older proprietary models.
-    * **Language Support:** Excellent performance on Hungarian due to its massive training corpus.
 * **Qwen3-Embedding-8B (Alibaba):**
     * **Why:** A massive context window (32k tokens) makes it perfect if you need to embed long Hungarian legal or technical documents without aggressive chunking.
 * **BGE-M3 (BAAI):**
@@ -35,7 +33,6 @@ If you need to keep your data on-premise or avoid API costs, these are the gold 
 | Model | Type | MTEB (Multi) | Context | Best Use Case |
 | :--- | :--- | :--- | :--- | :--- |
 | **Gemini Embedding 2** | API | ~68.3 | 2k+ | Top-tier retrieval accuracy |
-| **Harrier-OSS-v1 (27B)** | OSS | ~74.3 | 32k | Absolute best OSS performance |
 | **Cohere Embed v4** | API | ~65.2 | 128k | Large-scale production/Multilingual |
 | **BGE-M3** | OSS | ~63.0 | 8k | Hybrid search (Dense + Sparse) |
 
@@ -46,7 +43,7 @@ If you need to keep your data on-premise or avoid API costs, these are the gold 
 2.  **Normalization:** Since Hungarian uses many suffixes, ensure your preprocessing (or the model's tokenizer) handles accented characters ($á, é, ó, ö, ő,$ etc.) correctly. All the models above do this natively.
 3.  **Hybrid Search:** If your documents contain many specific Hungarian legal or technical terms, **BGE-M3** or a combination of **OpenAI/Gemini** with **Elasticsearch/BM25** will outperform pure vector search.
 
-**Recommendation:** If you want the easiest setup with the best results, go with **Gemini Embedding 2**. If you need to host it yourself and have the GPU power, use **Harrier-OSS-v1**.
+**Recommendation:** If you want the easiest setup with the best results, go with **Gemini Embedding 2**. If you need to host it yourself, use **Qwen3-Embedding-8B** or **BGE-M3**.
 
 ---
 Let's say we want to test out all of these embedding models using RAGAS. I want to create a custom framework that can use semantic + relational + hierarchical chunking in Python. What framework should I go with?
@@ -69,7 +66,7 @@ This allows the system to retrieve small, precise "child" chunks for high simila
 #### 2. Semantic Chunking (The Meaning Split)
 Instead of splitting every 512 tokens (which might cut a Hungarian sentence in half), this splits where the *meaning* changes.
 * **Module:** `SemanticSplitterNodeParser`.
-* **2026 Upgrade:** By using your suggested **Gemini Embedding 2** or **Harrier-OSS** within this splitter, the model calculates the cosine similarity between sentences and only breaks the chunk when the semantic "topic shift" exceeds a certain threshold.
+* **2026 Upgrade:** By using your suggested **Gemini Embedding 2** or **Qwen3-Embedding-8B** within this splitter, the model calculates the cosine similarity between sentences and only breaks the chunk when the semantic "topic shift" exceeds a certain threshold.
 
 #### 3. Relational Chunking (The Property Graph)
 This is the "secret sauce" for complex Hungarian documents (like legal or technical manuals) where information is linked across pages.
@@ -82,7 +79,7 @@ This is the "secret sauce" for complex Hungarian documents (like legal or techni
 
 ### Integrating with RAGAS for Evaluation
 
-Testing these models (Gemini vs. Harrier vs. BGE) requires a clean evaluation pipeline. RAGAS works natively with LlamaIndex.
+Testing these models (Gemini vs. Qwen3 vs. BGE) requires a clean evaluation pipeline. RAGAS works natively with LlamaIndex.
 
 1.  **Generate Synthetic Data:** Use LlamaIndex’s `RagDatasetGenerator` to create Hungarian Question-Context-Answer pairs based on your documents.
 2.  **The Evaluation Loop:**
@@ -103,7 +100,7 @@ Testing these models (Gemini vs. Harrier vs. BGE) requires a clean evaluation pi
 
 ### The "Custom" Recommendation
 In 2026, you should use **LlamaIndex Workflows**. Instead of a rigid pipeline, a Workflow allows you to define a "state machine" for your RAG. For example:
-1.  **Step 1:** Retrieve via Semantic Search (using Harrier-OSS).
+1.  **Step 1:** Retrieve via Semantic Search (using your chosen embedding model).
 2.  **Step 2:** If confidence is low, jump to the **Relational Property Graph**.
 3.  **Step 3:** Use **Auto-Merging** to grab the Hierarchical context.
 4.  **Step 4:** Pass to Gemini for the final Hungarian synthesis.
@@ -161,7 +158,7 @@ Instead of just storing flat vectors, use the **Property Graph Index**. This all
 * **Result:** You can query the database for "Give me the summary of the contract's annex" and it will navigate the relational links rather than just guessing based on keyword similarity.
 
 #### 3. Integration with RAGAS
-To test your models (Gemini, Harrier, BGE), you can wrap the LlamaIndex `QueryEngine` and feed it into RAGAS. Because you're using Postgres, your evaluation will be **persistent**—you can store your RAGAS scores directly in a separate table in the same database to track how different Hungarian embedding models perform over time.
+To test your models (Gemini, Qwen3, BGE), you can wrap the LlamaIndex `QueryEngine` and feed it into RAGAS. Because you're using Postgres, your evaluation will be **persistent**—you can store your RAGAS scores directly in a separate table in the same database to track how different Hungarian embedding models perform over time.
 
 ---
 

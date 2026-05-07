@@ -43,6 +43,10 @@ class ConfluenceSettings(BaseSettings):
         default=None,
         description="If set, only this page and its descendants are downloaded. Downloads the whole space if unset.",
     )
+    max_workers: int = Field(
+        default=8,
+        description="Parallel threads for page tree discovery and content download.",
+    )
 
 
 class EmbeddingSettings(BaseSettings):
@@ -52,12 +56,13 @@ class EmbeddingSettings(BaseSettings):
 
     device: str = "cuda"
     batch_size: int = 4
-    harrier_model_path: str = "microsoft/Harrier-OSS-v1-27B"
-    qwen_model_path: str = "Qwen/Qwen3-Embedding-8B"
+    gte_multilingual_model_path: str = "Alibaba-NLP/gte-multilingual-base"
+    e5_small_model_path: str = "intfloat/multilingual-e5-small"
     bge_m3_model_path: str = "BAAI/bge-m3"
-    quantize_harrier: bool = Field(
-        default=False,
-        description="Load Harrier-OSS-v1 in 4-bit quantization for 24GB GPUs",
+    qwen_model_path: str = "Qwen/Qwen3-Embedding-8B"
+    models_dir: str = Field(
+        default="models",
+        description="Local directory for caching downloaded embedding model weights.",
     )
 
 

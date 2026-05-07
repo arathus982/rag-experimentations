@@ -23,6 +23,19 @@ class EmbeddingModelAdapter(Protocol):
         """Return a LlamaIndex-compatible embedding model instance."""
         ...
 
+    def prefetch(self) -> None:
+        """Download model weights to local cache without loading to GPU memory."""
+        ...
+
+    def unload(self) -> None:
+        """Release GPU/MPS memory held by this model.
+
+        Must be called after indexing is complete for this model and before
+        loading the next model. Deletes internal references and flushes the
+        device cache so the allocator reclaims the memory.
+        """
+        ...
+
     def encode(self, texts: List[str]) -> List[List[float]]:
         """Encode a batch of texts into embedding vectors."""
         ...

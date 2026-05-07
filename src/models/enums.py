@@ -15,9 +15,10 @@ class ChunkingStrategy(str, Enum):
 class EmbeddingModelName(str, Enum):
     """Embedding models under evaluation."""
 
-    HARRIER_OSS_V1 = "harrier-oss-v1"
-    QWEN3_EMBEDDING_8B = "qwen3-embedding-8b"
+    GTE_MULTILINGUAL_BASE = "gte-multilingual-base"
+    MULTILINGUAL_E5_SMALL = "multilingual-e5-small"
     BGE_M3 = "bge-m3"
+    QWEN3_EMBEDDING_8B = "qwen3-embedding-8b"
 
 
 class RerankerModel(str, Enum):

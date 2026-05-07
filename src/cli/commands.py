@@ -26,6 +26,14 @@ from src.visualization.metrics_collector import MetricsCollector
 
 console = Console()
 
+# Fixed order from smallest to largest for prefetch and indexing phases.
+_MODEL_SIZE_ORDER: List[EmbeddingModelName] = [
+    EmbeddingModelName.GTE_MULTILINGUAL_BASE,   # ~305 MB fp16
+    EmbeddingModelName.MULTILINGUAL_E5_SMALL,   # ~471 MB fp16
+    EmbeddingModelName.BGE_M3,                  # ~1.2 GB fp16
+    EmbeddingModelName.QWEN3_EMBEDDING_8B,      # ~16 GB fp16
+]
+
 
 class CLICommands:
     """Top-level CLI commands orchestrating the RAG evaluation pipeline."""
@@ -59,33 +67,75 @@ class CLICommands:
     ) -> None:
         """Build indices for specified models x strategies.
 
+        Two-phase execution:
+          1. Prefetch weights for all models (smallest → largest, disk only, no GPU).
+          2. Load and index with each model in the same order.
+
         Defaults to all models and strategies if not specified.
         """
-        selected_models = self._resolve_models(models)
+        selected_models = self._sort_models_by_size(self._resolve_models(models))
         selected_strategies = self._resolve_strategies(strategies)
         documents = self._load_documents()
 
+        # Create all adapters once — reused across both phases.
+        adapters = {
+            m: EmbeddingModelFactory.create(m, self._settings.embedding)
+            for m in selected_models
+        }
+
+        # Phase 1: Download weights (no GPU loading).
+        console.print("\n[bold yellow]Phase 1: Prefetching model weights[/bold yellow]")
         for model_name in selected_models:
-            adapter = EmbeddingModelFactory.create(model_name, self._settings.embedding)
+            console.print(f"  [cyan]{model_name.value}[/cyan]")
+            try:
+                adapters[model_name].prefetch()
+                console.print(f"  [green]✓ {model_name.value}[/green]")
+            except Exception as e:
+                console.print(f"  [red]Prefetch failed for {model_name.value}: {e}[/red]")
+
+        # Phase 2: Load each model to GPU and run all strategies.
+        console.print("\n[bold yellow]Phase 2: Building indices[/bold yellow]")
+        check_indexer = Indexer(self._settings.database, IndexingTimer())
+
+        for model_name in selected_models:
+            adapter = adapters[model_name]
+
+            pending = [
+                s for s in selected_strategies
+                if not check_indexer.is_indexed(adapter.model_name, s)
+            ]
+            already_done = [s for s in selected_strategies if s not in pending]
+
             console.print(f"\n[bold blue]Model: {model_name.value}[/bold blue]")
 
-            for strategy in selected_strategies:
-                console.print(f"  Strategy: [cyan]{strategy.value}[/cyan]")
-                timer = IndexingTimer()
-                indexer = Indexer(self._settings.database, timer)
+            if already_done:
+                done_names = ", ".join(s.value for s in already_done)
+                console.print(f"  [dim]Already indexed, skipping: {done_names}[/dim]")
 
-                try:
-                    indexer.index_documents(
-                        documents=documents,
-                        adapter=adapter,
-                        strategy=strategy,
-                    )
-                except Exception as e:
-                    console.print(f"  [red]Indexing failed for {strategy.value}: {e}[/red]")
-                    continue
+            if not pending:
+                continue
 
-                self._result_store.save_timing_records(timer.records)
-                self._reporter.print_timing_summary(timer.records)
+            try:
+                for strategy in pending:
+                    console.print(f"  Strategy: [cyan]{strategy.value}[/cyan]")
+                    timer = IndexingTimer()
+                    indexer = Indexer(self._settings.database, timer)
+
+                    try:
+                        indexer.index_documents(
+                            documents=documents,
+                            adapter=adapter,
+                            strategy=strategy,
+                        )
+                    except Exception as e:
+                        console.print(f"  [red]Indexing failed for {strategy.value}: {e}[/red]")
+                        continue
+
+                    self._result_store.save_timing_records(timer.records)
+                    self._reporter.print_timing_summary(timer.records)
+            finally:
+                console.print(f"  [dim]Unloading {model_name.value} from device memory[/dim]")
+                adapter.unload()
 
     def evaluate(
         self,
@@ -291,6 +341,13 @@ class CLICommands:
             return GoldenQADataset()
         raw = qa_path.read_text(encoding="utf-8")
         return GoldenQADataset.model_validate_json(raw)
+
+    def _sort_models_by_size(
+        self, models: List[EmbeddingModelName]
+    ) -> List[EmbeddingModelName]:
+        """Sort models smallest to largest using the fixed size order."""
+        order = {m: i for i, m in enumerate(_MODEL_SIZE_ORDER)}
+        return sorted(models, key=lambda m: order.get(m, 999))
 
     def _resolve_models(self, names: Optional[List[str]]) -> List[EmbeddingModelName]:
         """Resolve model name strings to enum values."""

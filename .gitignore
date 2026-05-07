@@ -15,6 +15,9 @@ wheels/
 # Data directory (downloaded docs, evaluation datasets)
 data/
 
+# Downloaded embedding model weights
+models/
+
 # IDE
 .idea/
 .vscode/

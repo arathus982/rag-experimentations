@@ -57,7 +57,7 @@ The folder path is extracted from `doc.metadata["file_path"]` (provided by Llama
 
 **Why:** The 13-level folder hierarchy is the single richest structural signal in this corpus. A question about a feature in `Termékek/Számlázás/Kedvezmények` should surface chunks from that folder above semantically similar-sounding chunks from `Termékek/Számlázás/Díjszabás`. Without path enrichment, both folders' chunks embed to almost the same vector — the product name and billing vocabulary overlap. With enrichment, the folder path shifts the centroid of each chunk's embedding toward its specific domain location.
 
-**Why Hungarian labels (`Kontextus`, `Fejezet`):** The embedding models under evaluation (BGE-M3, Qwen3-Embedding-8B, Harrier-OSS-v1) are all multilingual and handle Hungarian natively. Using Hungarian prefix labels keeps the entire embedded text in one language, avoiding the soft token-weight confusion that English structural labels could introduce for a Hungarian retrieval task.
+**Why Hungarian labels (`Kontextus`, `Fejezet`):** The embedding models under evaluation (GTE-multilingual-base, multilingual-E5-small, BGE-M3, Qwen3-Embedding-8B) are all multilingual and handle Hungarian natively. Using Hungarian prefix labels keeps the entire embedded text in one language, avoiding the soft token-weight confusion that English structural labels could introduce for a Hungarian retrieval task.
 
 ---
 

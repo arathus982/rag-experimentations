@@ -8,6 +8,7 @@ from llama_index.core.llms import LLM
 from llama_index.core.schema import BaseNode, Document
 from llama_index.vector_stores.postgres import PGVectorStore
 from rich.console import Console
+from sqlalchemy import create_engine, inspect as sa_inspect, text
 
 from src.chunking.document_aware import DocumentAwareChunker
 from src.chunking.factory import ChunkingFactory
@@ -60,6 +61,27 @@ class Indexer:
             text_search_config=HUNGARIAN_TEXT_SEARCH_CONFIG,
             hybrid_search=True,
         )
+
+    def is_indexed(self, model_name: str, strategy: ChunkingStrategy) -> bool:
+        """Return True if this (model, strategy) table exists and contains rows.
+
+        Safe to call before any GPU loading — DB-only check, no model required.
+        Returns False on any DB connectivity error so indexing proceeds normally.
+        """
+        table_name = self._make_table_name(model_name, strategy.value)
+        engine = create_engine(self._db_settings.connection_url)
+        try:
+            if not sa_inspect(engine).has_table(table_name):
+                return False
+            with engine.connect() as conn:
+                row = conn.execute(
+                    text(f"SELECT 1 FROM {table_name} LIMIT 1")  # noqa: S608
+                ).fetchone()
+                return row is not None
+        except Exception:
+            return False
+        finally:
+            engine.dispose()
 
     def load_vector_index(
         self,

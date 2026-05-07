@@ -19,9 +19,10 @@ llamaindex
 ragas for evaluating the appropriate metrics for the different models
 
 Models that we want to evaluate (local hostable models only)
-Harrier-OSS-v1
-Qwen3-Embedding-8B
-BGE-M3
+Alibaba-NLP/gte-multilingual-base (~305 MB fp16, 768-dim)
+intfloat/multilingual-e5-small (~471 MB fp16, 384-dim)
+BAAI/bge-m3 (~1.2 GB fp16, 1024-dim)
+Qwen/Qwen3-Embedding-8B (~16 GB fp16, 4096-dim)
 
 Schema handling and validation:
 Pydantic

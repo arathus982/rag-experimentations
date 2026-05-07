@@ -1,7 +1,7 @@
-"""Embedding adapter for BAAI/BGE-M3 with hybrid search support."""
+"""Embedding adapter for Alibaba-NLP/gte-multilingual-base."""
 
 import gc
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional
 
 from llama_index.core.base.embeddings.base import BaseEmbedding
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
@@ -9,12 +9,10 @@ from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from src.models.enums import EmbeddingModelName
 
 
-class BgeM3EmbeddingAdapter:
-    """Adapter for BAAI/BGE-M3.
+class GteMultilingualEmbeddingAdapter:
+    """Adapter for Alibaba-NLP/gte-multilingual-base.
 
-    Supports dense, sparse, and multi-vector retrieval.
-    The hybrid mode (dense + sparse) is recommended for Hungarian
-    to capture both semantic meaning and specific word forms.
+    Compact 768-dim multilingual model (~305 MB fp16). Requires trust_remote_code=True.
     """
 
     def __init__(
@@ -29,15 +27,14 @@ class BgeM3EmbeddingAdapter:
         self._batch_size = batch_size
         self._models_dir = models_dir
         self._embed_model: Optional[HuggingFaceEmbedding] = None
-        self._flag_model: Optional[object] = None
 
     @property
     def model_name(self) -> str:
-        return EmbeddingModelName.BGE_M3.value
+        return EmbeddingModelName.GTE_MULTILINGUAL_BASE.value
 
     @property
     def embedding_dimension(self) -> int:
-        return 1024
+        return 768
 
     def prefetch(self) -> None:
         """Download model weights to local cache without loading to GPU memory."""
@@ -55,17 +52,15 @@ class BgeM3EmbeddingAdapter:
                 embed_batch_size=self._batch_size,
                 model_kwargs=model_kwargs,
                 cache_folder=self._models_dir,
+                trust_remote_code=True,
             )
         return self._embed_model
 
     def unload(self) -> None:
-        """Release MPS/CUDA memory held by the BGE-M3 model."""
+        """Release MPS/CUDA memory held by the GTE model."""
         if self._embed_model is not None:
             del self._embed_model
             self._embed_model = None
-        if self._flag_model is not None:
-            del self._flag_model
-            self._flag_model = None
         gc.collect()
         try:
             import torch
@@ -78,38 +73,6 @@ class BgeM3EmbeddingAdapter:
             pass
 
     def encode(self, texts: List[str]) -> List[List[float]]:
-        """Encode texts into dense embedding vectors."""
+        """Encode texts into embedding vectors."""
         model = self.get_llama_index_embedding()
         return [model.get_text_embedding(t) for t in texts]
-
-    def encode_hybrid(self, texts: List[str]) -> Tuple[List[List[float]], List[Dict[str, float]]]:
-        """Encode texts returning both dense and sparse vectors.
-
-        Uses FlagEmbedding's BGEM3FlagModel for native hybrid support.
-        On first call, resolves the local cache path so BGEM3FlagModel
-        does not re-download weights already fetched via HuggingFaceEmbedding.
-
-        Returns:
-            Tuple of (dense_vectors, sparse_vectors).
-            Sparse vectors are dicts mapping token_id -> weight.
-        """
-        if self._flag_model is None:
-            from FlagEmbedding import BGEM3FlagModel
-            from huggingface_hub import snapshot_download
-
-            # Resolve the exact local snapshot path so BGEM3FlagModel loads
-            # from the project cache directory instead of the default HF home.
-            local_path = snapshot_download(
-                self._model_path,
-                cache_dir=self._models_dir,
-            )
-            self._flag_model = BGEM3FlagModel(local_path, use_fp16=True)
-
-        output = self._flag_model.encode(  # type: ignore[union-attr]
-            texts,
-            return_dense=True,
-            return_sparse=True,
-        )
-        dense_vectors = output["dense_vecs"].tolist()
-        sparse_vectors = output["lexical_weights"]
-        return dense_vectors, sparse_vectors

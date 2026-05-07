@@ -1,6 +1,8 @@
 """Orchestrates the full Confluence -> local Markdown ingestion pipeline."""
 
 import re
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
@@ -42,8 +44,8 @@ class IngestionPipeline:
     def run(self) -> ConfluenceManifest:
         """Execute the full ingestion pipeline.
 
-        1. Fetch page tree from Confluence
-        2. For each page (respecting hierarchy):
+        1. Fetch page tree from Confluence (parallel BFS discovery + metadata fetch)
+        2. For each page, in parallel:
            a. Create local directory structure
            b. Download page HTML content
            c. Download images
@@ -56,16 +58,14 @@ class IngestionPipeline:
             The completed ConfluenceManifest.
         """
         space_key = self._settings.confluence.space_key
+        max_workers = self._settings.confluence.max_workers
         console.print(f"\n[bold green]Starting ingestion for space: {space_key}[/bold green]")
 
-        # Verify credentials before doing any real work
         self._client.check_connection()
 
-        # Step 1: Fetch page tree
         pages = self._client.get_pages()
         console.print(f"Found [bold]{len(pages)}[/bold] pages")
 
-        # Build lookup and ancestry paths
         pages_by_id = {p.page_id: p for p in pages}
         base_dir = self._data_dir / "confluence" / space_key
 
@@ -75,21 +75,34 @@ class IngestionPipeline:
             pages={p.page_id: p for p in pages},
         )
 
-        # Step 2: Process each page
         processed = 0
-        try:
-            for page in tqdm(pages, desc="Downloading pages"):
-                try:
-                    self._process_page(page, pages_by_id, base_dir, manifest)
-                    processed += 1
-                except Exception as e:
-                    console.print(
-                        f"[red]Error processing '{page.title}' (ID: {page.page_id}): {e}[/red]"
-                    )
-        except KeyboardInterrupt:
-            console.print(f"\n[yellow]Interrupted. Saving partial manifest ({processed} pages)…[/yellow]")
+        processed_lock = threading.Lock()
 
-        # Step 3: Save manifest (always, even on interrupt)
+        def _process_tracked(page: ConfluencePage) -> None:
+            nonlocal processed
+            try:
+                self._process_page(page, pages_by_id, base_dir, manifest)
+                with processed_lock:
+                    processed += 1
+            except Exception as e:
+                console.print(
+                    f"[red]Error processing '{page.title}' (ID: {page.page_id}): {e}[/red]"
+                )
+
+        try:
+            with tqdm(total=len(pages), desc="Downloading pages") as pbar:
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    futures = {
+                        executor.submit(_process_tracked, page): page for page in pages
+                    }
+                    for future in as_completed(futures):
+                        future.result()
+                        pbar.update(1)
+        except KeyboardInterrupt:
+            console.print(
+                f"\n[yellow]Interrupted. Saving partial manifest ({processed} pages)…[/yellow]"
+            )
+
         self._metadata_manager.save_manifest(manifest)
         console.print(
             f"\n[bold green]Ingestion complete.[/bold green] "
@@ -105,25 +118,24 @@ class IngestionPipeline:
         base_dir: Path,
         manifest: ConfluenceManifest,
     ) -> None:
-        """Process a single page: download content, images, convert to MD."""
-        # Build local path from ancestry
+        """Process a single page: download content, images, convert to MD.
+
+        Thread-safe: each page operates on a unique directory path and manifest entry.
+        ConfluenceClient uses per-thread requests.Session instances.
+        """
         page_dir = self._build_local_path(page, pages_by_id, base_dir)
         page_dir.mkdir(parents=True, exist_ok=True)
 
-        # Download and convert HTML to Markdown
         html_content = self._client.get_page_content(page.page_id)
         markdown = self._converter.convert(html_content)
 
-        # Download images
         images_dir = page_dir / "images"
         downloaded_images = self._image_downloader.download_page_images(page.page_id, images_dir)
 
-        # Write Markdown file
         md_filename = _sanitize_filename(page.title) + ".md"
         md_path = page_dir / md_filename
         md_path.write_text(markdown, encoding="utf-8")
 
-        # Update manifest
         page_in_manifest = manifest.pages[page.page_id]
         page_in_manifest.local_path = str(md_path)
         page_in_manifest.images = downloaded_images

@@ -1,6 +1,8 @@
 """Confluence API wrapper for page traversal and content download."""
 
-from typing import Any, Dict, List, Optional
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Dict, List, Optional, Set, cast
 
 from atlassian import Confluence
 from rich.console import Console
@@ -16,13 +18,25 @@ class ConfluenceClient:
 
     def __init__(self, settings: ConfluenceSettings) -> None:
         self._settings = settings
-        is_cloud = "atlassian.net" in settings.base_url
-        self._client = Confluence(
-            url=settings.base_url,
-            username=settings.username,
-            password=settings.api_token.get_secret_value(),
-            cloud=is_cloud,
+        self._is_cloud = "atlassian.net" in settings.base_url
+        self._thread_local = threading.local()
+        # Populate for main thread immediately
+        self._thread_local.confluence = self._make_confluence()
+
+    def _make_confluence(self) -> Confluence:
+        return Confluence(
+            url=self._settings.base_url,
+            username=self._settings.username,
+            password=self._settings.api_token.get_secret_value(),
+            cloud=self._is_cloud,
         )
+
+    @property
+    def _confluence(self) -> Confluence:
+        """Per-thread Confluence instance — requests.Session is not thread-safe."""
+        if not hasattr(self._thread_local, "confluence"):
+            self._thread_local.confluence = self._make_confluence()
+        return cast(Confluence, self._thread_local.confluence)
 
     def check_connection(self) -> None:
         """Verify connectivity and credentials by probing the configured space.
@@ -31,7 +45,7 @@ class ConfluenceClient:
         """
         space_key = self._settings.space_key
         try:
-            space: Optional[Dict[str, Any]] = self._client.get_space(space_key)
+            space: Optional[Dict[str, Any]] = self._confluence.get_space(space_key)
             if not space:
                 raise RuntimeError(f"Space '{space_key}' not found or not accessible.")
             space_name = space.get("name", space_key)
@@ -57,7 +71,7 @@ class ConfluenceClient:
 
         space_key = self._settings.space_key
         console.print(f"Fetching all pages from space [bold]{space_key}[/bold]...")
-        raw_pages: List[Dict[str, Any]] = self._client.get_all_pages_from_space(
+        raw_pages: List[Dict[str, Any]] = self._confluence.get_all_pages_from_space(
             space=space_key,
             start=0,
             limit=500,
@@ -66,29 +80,73 @@ class ConfluenceClient:
         return self._build_page_tree(raw_pages, space_key)
 
     def _get_page_subtree(self, root_page_id: str) -> List[ConfluencePage]:
-        """Recursively collect a page and all its descendants."""
-        space_key = self._settings.space_key
-        collected: List[Dict[str, Any]] = []
-        self._collect_descendants(root_page_id, collected)
-        return self._build_page_tree(collected, space_key)
+        """Collect page subtree using two-phase parallel BFS.
 
-    def _collect_descendants(
-        self, page_id: str, collected: List[Dict[str, Any]]
-    ) -> None:
-        """DFS traversal: fetch page metadata then recurse into children."""
-        page: Dict[str, Any] = self._client.get_page_by_id(
+        Phase 1: Discover all page IDs via parallel child-fetching per BFS level.
+        Phase 2: Fetch full metadata (with ancestors) for all discovered IDs in parallel.
+        """
+        space_key = self._settings.space_key
+        max_workers = self._settings.max_workers
+
+        # Phase 1: BFS to collect all descendant page IDs
+        all_ids: Set[str] = {root_page_id}
+        frontier = [root_page_id]
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            while frontier:
+                child_futures = {
+                    executor.submit(self._fetch_children, pid): pid for pid in frontier
+                }
+                frontier = []
+                for child_future in as_completed(child_futures):
+                    pid = child_futures[child_future]
+                    try:
+                        children = child_future.result()
+                    except Exception as exc:
+                        console.print(
+                            f"[yellow]Warning: failed to fetch children of {pid}: {exc}[/yellow]"
+                        )
+                        continue
+                    for child in children:
+                        cid = str(child["id"])
+                        if cid not in all_ids:
+                            all_ids.add(cid)
+                            frontier.append(cid)
+
+        console.print(f"Discovered [bold]{len(all_ids)}[/bold] pages")
+
+        # Phase 2: Fetch full page metadata (with ancestors) for all IDs in parallel
+        raw_pages: List[Dict[str, Any]] = []
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            page_futures = {
+                executor.submit(self._fetch_page_with_ancestors, pid): pid
+                for pid in all_ids
+            }
+            for page_future in as_completed(page_futures):
+                pid = page_futures[page_future]
+                try:
+                    raw_pages.append(page_future.result())
+                except Exception as exc:
+                    console.print(
+                        f"[yellow]Warning: failed to fetch metadata for page {pid}: {exc}[/yellow]"
+                    )
+
+        return self._build_page_tree(raw_pages, space_key)
+
+    def _fetch_children(self, page_id: str) -> List[Dict[str, Any]]:
+        """Fetch child pages for a given page ID. Called from worker threads."""
+        return self._confluence.get_child_pages(page_id)  # type: ignore[no-any-return]
+
+    def _fetch_page_with_ancestors(self, page_id: str) -> Dict[str, Any]:
+        """Fetch full page metadata including ancestors. Called from worker threads."""
+        return self._confluence.get_page_by_id(  # type: ignore[no-any-return]
             page_id=page_id,
             expand="ancestors",
         )
-        collected.append(page)
-
-        children: List[Dict[str, Any]] = self._client.get_child_pages(page_id)
-        for child in children:
-            self._collect_descendants(str(child["id"]), collected)
 
     def get_page_content(self, page_id: str) -> str:
         """Return the HTML storage-format body of a page."""
-        page = self._client.get_page_by_id(
+        page = self._confluence.get_page_by_id(
             page_id=page_id,
             expand="body.storage",
         )
@@ -96,7 +154,7 @@ class ConfluenceClient:
 
     def get_page_attachments(self, page_id: str) -> List[Dict[str, str]]:
         """List all attachments on a page."""
-        result = self._client.get_attachments_from_content(
+        result = self._confluence.get_attachments_from_content(
             page_id=page_id,
             start=0,
             limit=100,
@@ -114,7 +172,7 @@ class ConfluenceClient:
 
     def download_attachment(self, download_url: str) -> bytes:
         """Download a single attachment and return raw bytes."""
-        return self._client.request(  # type: ignore[no-any-return]
+        return self._confluence.request(  # type: ignore[no-any-return]
             method="GET",
             path=download_url,
         ).content

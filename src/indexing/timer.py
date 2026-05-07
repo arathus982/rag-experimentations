@@ -25,7 +25,7 @@ class IndexingTimer:
         """Context manager that records indexing duration.
 
         Usage:
-            with timer.measure("doc1", "Title", "harrier-oss-v1", "semantic"):
+            with timer.measure("doc1", "Title", "bge-m3", "semantic"):
                 # ... indexing happens here ...
         """
         start = time.perf_counter()
